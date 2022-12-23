@@ -1,4 +1,4 @@
-package com.template.app.common.infrastructure
+package com.template.app
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.kotest.matchers.shouldBe
