@@ -11,11 +11,6 @@ make build
 make up
 ```
 
-### Stop project
-```bash
-make down
-```
-
 ---
 ## TEST ☢️
 
