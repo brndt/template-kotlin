@@ -1,0 +1,25 @@
+name: Continuous Integration
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Build project
+        run: ./gradlew buildFatJar
+
+      - name: Linter 🧬
+        run: ./gradlew lintKotlin
+
+      - name: Unit Test ☢️
+        run: ./gradlew unitTest
+
+      - name: Integration Test ☢️
+        run: ./gradlew integrationTest
