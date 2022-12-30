@@ -1,7 +1,10 @@
 package com.template.app
 
 import arrow.core.Either
-import com.fasterxml.jackson.module.kotlin.MissingKotlinParameterException
+import arrow.core.None
+import arrow.core.Option
+import arrow.core.Some
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.template.app.common.domain.service.Error
 import com.template.app.common.domain.service.InvalidArgumentDomainError
 import com.template.app.common.domain.service.NotAuthorizedError
@@ -11,15 +14,20 @@ import com.template.app.common.domain.service.UnexpectedError
 import com.template.app.common.domain.service.UnserializableError
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.CannotTransformContentToTypeException
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.util.pipeline.*
 
 context(PipelineContext<Unit, ApplicationCall>)
-suspend inline fun <reified A : Any> Either<Error, A>.toResponse(status: HttpStatusCode): Unit =
+suspend inline fun <reified A : Any?> Either<Error, A>.toResponse(status: HttpStatusCode): Unit =
     when (this) {
         is Either.Left -> handleError(this.value)
-        is Either.Right -> call.respond(status, this.value)
+        is Either.Right -> when (val response = this.value) {
+            is Some<*> -> call.respondNullable(status, response.value)
+            is None -> call.respond(status)
+            else -> if (response is Unit) call.respond(status) else call.respondNullable(status, response)
+        }
     }
 
 suspend fun PipelineContext<Unit, ApplicationCall>.handleError(error: Error): Unit =
@@ -35,7 +43,16 @@ suspend fun PipelineContext<Unit, ApplicationCall>.handleError(error: Error): Un
 suspend inline fun <reified T : Any> PipelineContext<Unit, ApplicationCall>.receive(): Either<Error, T> =
     Either.catch { call.receive<T>() }.mapLeft { e ->
         when (e.cause) {
-            is MissingKotlinParameterException -> UnserializableError("Cannot serialize the request because it's missing mandatory parameter")
-            else -> UnexpectedError(e.message ?: "Unexpected error happened")
+            is JsonProcessingException -> UnserializableError("Illegal json parameter found")
+            else -> when (e) {
+                is CannotTransformContentToTypeException -> UnserializableError("Invalid content type")
+                else -> UnexpectedError(e.cause.toString())
+            }
         }
     }
+
+fun Parameters.getString(param: String) =
+    Option.fromNullable(this[param].toString()).toEither { InvalidArgumentDomainError("Parameter <$param> does not exist") }
+
+fun Parameters.getInt(param: String) =
+    Option.fromNullable(this[param]?.toIntOrNull()).toEither { InvalidArgumentDomainError("Parameter <$param> does not exist or is invalid") }
